@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Viaggi">
+<title>Viaggi</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f6f6f3;--ink:#1c1c1e;--mut:#8a8a8e;--ac:#0a7d6b;--card:#fff;--line:#e5e5e0;--red:#c0392b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,system-ui,sans-serif}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+header{padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;display:flex;align-items:center;gap:8px;background:#fff;border-bottom:1px solid var(--line)}
+h1{font-size:19px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+h2{font-size:15px;margin:18px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+main{flex:1;overflow:auto;padding:14px;position:relative;-webkit-overflow-scrolling:touch}
+main.map{padding:0;overflow:hidden}
+#map{position:absolute;inset:0}
+nav{display:flex;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;padding:8px 0 6px;font-size:11px;color:var(--mut)}
+nav button b{display:block;font-size:20px;font-weight:400}
+nav button.on{color:var(--ac);font-weight:600}
+.back,.ib{border:0;background:none;font-size:28px;line-height:1;color:var(--ac);padding:0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.card.tap{cursor:pointer}
+.big{font-size:17px;font-weight:600}
+.mut{color:var(--mut);font-size:14px}
+.ok{color:var(--ac);font-weight:600}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{min-width:0}
+.item{display:flex;gap:12px;align-items:flex-start}
+.em{font-size:26px;width:34px;text-align:center}
+.grow{flex:1}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;font-size:15px;color:var(--ink)}
+.btn.pri{background:var(--ac);color:#fff;border-color:var(--ac);width:100%;margin-top:14px}
+.btn.del{color:var(--red);width:100%;margin-top:8px}
+.btn.sm{padding:7px 10px;font-size:14px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+label{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.res{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;margin-top:6px;font-size:14px}
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;z-index:2000}
+#sheet.on{display:flex}
+.panel{background:var(--bg);width:100%;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 20px)}
+.panel h3{margin:0 0 4px;font-size:18px}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:9px 14px;border-radius:20px;font-size:14px;z-index:3000}
+.pin{font-size:20px;background:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}
+.me{width:16px;height:16px;border-radius:50%;background:#2979ff;border:3px solid #fff;box-shadow:0 0 0 2px rgba(41,121,255,.35)}
+.wx{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.wx .d{width:84px;font-size:14px}
+.wx.in{background:#e9f5f2;margin:0 -14px;padding:10px 14px}
+a{color:var(--ac)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="sheet"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,10);
+const CATS={ristorante:['🍽️','Ristorante'],bar:['☕','Bar / caffè / bistrot'],fastfood:['🍔','Fast food'],pub:['🍺','Pub'],museo:['🏛️','Museo'],chiesa:['⛪','Chiesa'],attrazione:['🗼','Attrazione'],parco:['🌳','Parco'],quartiere:['🏘️','Quartiere'],altro:['📍','Altro']};
+const MODES={metro:['🚇','Metro'],bus:['🚌','Bus'],tram:['🚊','Tram'],treno:['🚆','Treno'],taxi:['🚕','Taxi'],piedi:['🚶','A piedi'],bici:['🚲','Bici'],traghetto:['⛴️','Traghetto']};
+const ECATS=['Cibo','Trasporti','Alloggio','Ingressi','Shopping','Altro'];
+const CUR=['EUR','GBP','USD','CHF','JPY','CZK','PLN','HUF','SEK','NOK','DKK','TRY','AUD','CAD','CNY','THB'];
+
+function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
+let db=load('viaggi_v1',{trips:[],cur:null});
+let rc=load('rates_v1',{});
+function save(){try{localStorage.setItem('viaggi_v1',JSON.stringify(db))}catch(e){toast('Impossibile salvare i dati')}}
+const trip=()=>db.trips.find(t=>t.id===db.cur);
+let ui={tab:'vicino',asked:false},map=null,pos=null,tmp={};
+
+function toast(m){const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
+function money(n,c){try{return new Intl.NumberFormat('it-IT',{style:'currency',currency:c}).format(n)}catch(e){return n.toFixed(2)+' '+c}}
+function dayDate(t,i){if(!t.start)return'';const d=new Date(t.start+'T12:00:00');d.setDate(d.getDate()+i);return d.toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})}
+function km(a,b){const R=6371,r=x=>x*Math.PI/180,dl=r(b.lat-a.lat),dn=r(b.lon-a.lon);const h=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+function dist(d){return d<1?Math.round(d*1000/10)*10+' m':d.toFixed(1).replace('.',',')+' km'}
+function dir(lat,lon,m,fl,fo){const f=fl!=null?`&saddr=${fl},${fo}`:'';return `https://maps.apple.com/?daddr=${lat},${lon}${f}&dirflg=${m}`}
+const short=r=>r.name||r.display_name.split(',')[0];
+const curOpts=s=>CUR.map(c=>`<option ${c===s?'selected':''}>${c}</option>`).join('');
+const catOpts=s=>Object.keys(CATS).map(k=>`<option value="${k}" ${k===s?'selected':''}>${CATS[k][0]} ${CATS[k][1]}</option>`).join('');
+const dayOpts=(t,s)=>Array.from({length:t.days},(_,i)=>`<option value="${i}" ${i===s?'selected':''}>Giorno ${i+1} ${dayDate(t,i)}</option>`).join('');
+
+/* ---------- ricerca luoghi ---------- */
+async function geocode(q,bias){
+  const u=new URL('https://nominatim.openstreetmap.org/search');
+  u.searchParams.set('format','jsonv2');u.searchParams.set('q',q);u.searchParams.set('limit','6');u.searchParams.set('accept-language','it');
+  if(bias)u.searchParams.set('viewbox',[bias.lon-.4,bias.lat+.4,bias.lon+.4,bias.lat-.4].join(','));
+  const r=await fetch(u);if(!r.ok)throw new Error('x');return r.json();
+}
+function guessCat(r){
+  const c=r.category,t=r.type;
+  if(t==='restaurant')return'ristorante';
+  if(['cafe','bar','biergarten'].includes(t))return'bar';
+  if(t==='fast_food')return'fastfood';
+  if(t==='pub')return'pub';
+  if(t==='museum'||t==='gallery')return'museo';
+  if(['place_of_worship','church','cathedral','chapel'].includes(t))return'chiesa';
+  if(c==='leisure'&&['park','garden'].includes(t))return'parco';
+  if(c==='place'&&['suburb','neighbourhood','quarter','city_block'].includes(t))return'quartiere';
+  if(c==='tourism'||c==='historic')return'attrazione';
+  return'altro';
+}
+async function runSearch(){
+  const q=$('#pq').value.trim();if(!q)return;
+  const box=$('#pres');box.innerHTML='<p class="mut">Ricerca in corso…</p>';
+  try{
+    const res=await geocode(q,tmp.bias);tmp.results=res;
+    box.innerHTML=res.length?res.map((r,i)=>`<button class="res" onclick="pick(${i})"><b>${esc(short(r))}</b><br><span class="mut">${esc(r.display_name)}</span></button>`).join(''):'<p class="mut">Nessun risultato</p>';
+  }catch(e){box.innerHTML='<p class="mut">Ricerca non riuscita. Controlla la connessione.</p>'}
+}
+function pick(i){
+  const r=tmp.results[i];tmp.pick={lat:+r.lat,lon:+r.lon};
+  $('#pres').innerHTML=`<p class="ok">✔ ${esc(short(r))}</p>`;
+  if(tmp.onPick)tmp.onPick(r);
+}
+
+/* ---------- sheet ---------- */
+function sheet(title,body){const s=$('#sheet');s.innerHTML=`<div class="panel"><div class="row"><h3 class="grow">${esc(title)}</h3><button class="ib" onclick="closeSheet()">×</button></div>${body}</div>`;s.classList.add('on')}
+function closeSheet(){$('#sheet').classList.remove('on');$('#sheet').innerHTML=''}
+$('#sheet').addEventListener('click',e=>{if(e.target.id==='sheet')closeSheet()});
+const searchBox=ph=>`<label>Cerca un luogo</label><div class="row"><input id="pq" placeholder="${ph}"><button class="btn" onclick="runSearch()">Cerca</button></div><div id="pres"></div>`;
+
+/* ---------- viaggi ---------- */
+function newTripSheet(){
+  tmp={pick:null,onPick:r=>{if(!$('#f_name').value)$('#f_name').value='Viaggio a '+short(r)}};
+  sheet('Nuovo viaggio',`<label>Nome del viaggio</label><input id="f_name" placeholder="Es. Weekend a Firenze">
+  ${searchBox('Città di destinazione')}
+  <label>Data di partenza</label><input id="f_start" type="date">
+  <label>Numero di giorni</label><input id="f_days" type="number" min="1" max="60" value="3">
+  <label>Valuta locale</label><select id="f_cur">${curOpts('EUR')}</select>
+  <button class="btn pri" onclick="createTrip()">Crea viaggio</button>`);
+}
+function createTrip(){
+  if(!tmp.pick){toast('Cerca e scegli la città');return}
+  const t={id:uid(),name:$('#f_name').value.trim()||'Nuovo viaggio',lat:tmp.pick.lat,lon:tmp.pick.lon,start:$('#f_start').value,days:Math.max(1,+$('#f_days').value||1),cur:$('#f_cur').value,main:'EUR',lodging:null,airport:null,stops:[],transports:[],expenses:[]};
+  db.trips.push(t);closeSheet();openTrip(t.id);
+}
+function openTrip(id){db.cur=id;save();ui.tab='vicino';ui.asked=false;render()}
+function goHome(){db.cur=null;save();render()}
+function delTrip(id){if(confirm('Eliminare questo viaggio e tutti i suoi dati?')){db.trips=db.trips.filter(t=>t.id!==id);db.cur=null;save();render()}}
+function loadExample(){
+  const S=(day,time,name,lat,lon,cat,note)=>({id:uid(),day,time,name,lat,lon,cat,note});
+  const t={id:uid(),name:'Firenze (esempio)',lat:43.7696,lon:11.2558,start:'',days:3,cur:'EUR',main:'EUR',
+    lodging:{name:'Alloggio vicino a Santa Maria Novella',lat:43.7762,lon:11.2480},
+    airport:{name:'Aeroporto di Firenze Peretola',lat:43.8100,lon:11.2051},
+    stops:[
+      S(0,'09:30','Duomo di Firenze',43.7731,11.2560,'chiesa','Salita alla cupola: meglio prenotare'),
+      S(0,'11:30','Galleria degli Uffizi',43.7677,11.2553,'museo','Biglietto con orario'),
+      S(0,'13:30','Trattoria Mario',43.7767,11.2540,'ristorante','Pranzo, chiude presto'),
+      S(0,'16:00','Caffè Gilli',43.7712,11.2541,'bar','Caffè in piazza della Repubblica'),
+      S(1,'10:00','Ponte Vecchio',43.7680,11.2531,'attrazione',''),
+      S(1,'12:30','All\'Antico Vinaio',43.7689,11.2574,'fastfood','Panino, c\'è la coda'),
+      S(1,'14:30','Giardino di Boboli',43.7627,11.2478,'parco',''),
+      S(1,'17:00','Oltrarno',43.7658,11.2455,'quartiere','Botteghe artigiane'),
+      S(1,'21:00','The Fiddler\'s Elbow',43.7745,11.2494,'pub',''),
+      S(2,'10:00','Basilica di Santa Croce',43.7686,11.2626,'chiesa',''),
+      S(2,'18:30','Piazzale Michelangelo',43.7629,11.2650,'attrazione','Tramonto sulla città')],
+    transports:[{id:uid(),mode:'tram',from:'Aeroporto',to:'Stazione Santa Maria Novella',cost:1.7,cur:'EUR',note:'Tramvia T2, circa 20 minuti (verifica la tariffa)'}],
+    expenses:[{id:uid(),desc:'Biglietto Uffizi',amount:25,cur:'EUR',cat:'Ingressi',date:new Date().toISOString().slice(0,10)}]};
+  db.trips.push(t);openTrip(t.id);
+}
+
+/* ---------- render ---------- */
+function render(){
+  if(map){map.remove();map=null}
+  const t=trip(),app=$('#app');
+  if(!t){
+    app.innerHTML=`<header><h1>🧭 I miei viaggi</h1></header><main>
+    ${db.trips.map(x=>`<div class="card tap" onclick="openTrip('${x.id}')"><div class="big">${esc(x.name)}</div><div class="mut">${x.days} giorni${x.start?' · dal '+new Date(x.start+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}):''} · ${x.stops.length} tappe</div></div>`).join('')||'<p class="mut">Non hai ancora nessun viaggio.</p>'}
+    <button class="btn pri" onclick="newTripSheet()">+ Nuovo viaggio</button>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="loadExample()">Carica esempio Firenze</button></main>`;
+    return;
+  }
+  const tabs=[['vicino','📍','Vicino'],['mappa','🗺️','Mappa'],['tappe','📅','Tappe'],['trasporti','🚇','Trasporti'],['spese','💶','Spese'],['meteo','⛅','Meteo']];
+  app.innerHTML=`<header><button class="back" onclick="goHome()">‹</button><h1>${esc(t.name)}</h1><button class="ib" style="font-size:20px" onclick="delTrip('${t.id}')">🗑️</button></header>
+  <main id="main" class="${ui.tab==='mappa'?'map':''}">${tabHTML(t)}</main>
+  <nav>${tabs.map(x=>`<button class="${ui.tab===x[0]?'on':''}" onclick="setTab('${x[0]}')"><b>${x[1]}</b>${x[2]}</button>`).join('')}</nav>`;
+  if(ui.tab==='vicino'&&!pos&&!ui.asked){ui.asked=true;locate(()=>{if(ui.tab==='vicino'&&trip())render()})}
+  if(ui.tab==='mappa')initMap(t);
+  if(ui.tab==='meteo')loadWeather(t);
+  if(ui.tab==='spese')loadTotals(t);
+}
+function setTab(x){ui.tab=x;render()}
+function tabHTML(t){return({vicino:vicinoHTML,mappa:()=>'<div id="map"></div>',tappe:tappeHTML,trasporti:trasportiHTML,spese:speseHTML,meteo:()=>'<div id="wx"><p class="mut">Caricamento…</p></div>'})[ui.tab](t)}
+
+/* ---------- posizione / vicino ---------- */
+function locate(cb){
+  if(!navigator.geolocation){toast('Posizione non disponibile');return}
+  navigator.geolocation.getCurrentPosition(p=>{pos={lat:p.coords.latitude,lon:p.coords.longitude};if(cb)cb()},()=>toast('Posizione non disponibile: controlla i permessi di Safari'),{enableHighAccuracy:true,timeout:15000,maximumAge:30000});
+}
+function places(t){
+  const a=t.stops.map(s=>({...s,e:CATS[s.cat][0],label:'Giorno '+(s.day+1)+(s.time?' · '+s.time:'')}));
+  if(t.lodging)a.push({name:t.lodging.name,lat:t.lodging.lat,lon:t.lodging.lon,e:'🏨',label:'Alloggio',note:''});
+  return a;
+}
+function vicinoHTML(t){
+  if(!pos)return `<div class="card"><div class="big">📍 Luogo più vicino</div><p class="mut">Per mostrarti la tappa più vicina serve la tua posizione.</p><button class="btn pri" onclick="locate(render)">Usa la mia posizione</button></div>`;
+  const l=places(t).map(p=>({...p,d:km(pos,p)})).sort((a,b)=>a.d-b.d);
+  if(!l.length)return '<div class="card">Aggiungi qualche tappa per vedere quella più vicina.</div>';
+  const n=l[0];
+  return `<div class="card"><div class="mut">Il più vicino a te</div><div class="item" style="margin-top:6px"><div class="em">${n.e}</div><div class="grow"><div class="big">${esc(n.name)}</div><div class="mut">${dist(n.d)} · ${esc(n.label)}</div>${n.note?`<div style="margin-top:4px">${esc(n.note)}</div>`:''}</div></div>
+  <div class="btns"><a class="btn sm" href="${dir(n.lat,n.lon,'w')}">🚶 A piedi</a><a class="btn sm" href="${dir(n.lat,n.lon,'r')}">🚇 Mezzi</a><a class="btn sm" href="${dir(n.lat,n.lon,'d')}">🚗 Auto</a></div></div>
+  <button class="btn sm" onclick="locate(render)">↻ Aggiorna posizione</button>
+  <h2>Poi</h2>${l.slice(1,7).map(p=>`<div class="card"><div class="item"><div class="em">${p.e}</div><div class="grow"><div><b>${esc(p.name)}</b></div><div class="mut">${dist(p.d)} · ${esc(p.label)}</div></div><a class="btn sm" href="${dir(p.lat,p.lon,'w')}">Vai</a></div></div>`).join('')}`;
+}
+
+/* ---------- mappa ---------- */
+function initMap(t){
+  map=L.map('map',{zoomControl:false}).setView([t.lat,t.lon],13);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+  const pts=[];
+  const add=(p,e)=>{
+    const m=L.marker([p.lat,p.lon],{icon:L.divIcon({className:'',html:`<div class="pin">${e}</div>`,iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-14]})}).addTo(map);
+    m.bindPopup(`<b>${esc(p.name)}</b>${p.label?'<br>'+esc(p.label):''}<br><a href="${dir(p.lat,p.lon,'w')}">Indicazioni a piedi</a> · <a href="${dir(p.lat,p.lon,'r')}">Mezzi</a>`);
+    pts.push([p.lat,p.lon]);
+  };
+  places(t).forEach(p=>add(p,p.e));
+  if(t.airport)add({name:t.airport.name,lat:t.airport.lat,lon:t.airport.lon,label:'Aeroporto'},'✈️');
+  if(pos)L.marker([pos.lat,pos.lon],{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map);
+  if(pts.length>1)map.fitBounds(pts,{padding:[40,40],maxZoom:16});else if(pts.length===1)map.setView(pts[0],15);
+  setTimeout(()=>map&&map.invalidateSize(),150);
+}
+
+/* ---------- tappe ---------- */
+function tappeHTML(t){
+  let h='';
+  for(let d=0;d<t.days;d++){
+    const s=t.stops.filter(x=>x.day===d).sort((a,b)=>(a.time||'99').localeCompare(b.time||'99'));
+    h+=`<h2>Giorno ${d+1} ${dayDate(t,d)}</h2>`+(s.length?s.map(x=>`<div class="card tap" onclick="stopSheet('${x.id}')"><div class="item"><div class="em">${CATS[x.cat][0]}</div><div class="grow"><div><b>${esc(x.name)}</b></div><div class="mut">${x.time||'senza orario'}</div>${x.note?`<div>${esc(x.note)}</div>`:''}</div></div></div>`).join(''):'<p class="mut">Nessuna tappa</p>');
+  }
+  return h+`<button class="btn pri" onclick="stopSheet()">+ Aggiungi tappa</button>`;
+}
+function stopSheet(id){
+  const t=trip(),s=id?t.stops.find(x=>x.id===id):null;
+  tmp={pick:s?{lat:s.lat,lon:s.lon}:null,bias:t,editId:id,onPick:r=>{$('#f_name').value=short(r);$('#f_cat').value=guessCat(r)}};
+  sheet(s?'Modifica tappa':'Nuova tappa',`${searchBox('Es. Duomo, Trattoria Mario…')}
+  <label>Nome</label><input id="f_name" value="${esc(s?s.name:'')}">
+  <label>Giorno</label><select id="f_day">${dayOpts(t,s?s.day:0)}</select>
+  <label>Orario (facoltativo)</label><input id="f_time" type="time" value="${s?s.time||'':''}">
+  <label>Tipo</label><select id="f_cat">${catOpts(s?s.cat:'attrazione')}</select>
+  <label>Note</label><textarea id="f_note" rows="3">${esc(s?s.note||'':'')}</textarea>
+  <button class="btn pri" onclick="saveStop()">Salva</button>${s?'<button class="btn del" onclick="delStop()">Elimina</button>':''}`);
+}
+function saveStop(){
+  const t=trip();if(!tmp.pick){toast('Cerca e scegli un luogo');return}
+  const o={day:+$('#f_day').value,time:$('#f_time').value,name:$('#f_name').value.trim()||'Tappa',cat:$('#f_cat').value,note:$('#f_note').value.trim(),lat:tmp.pick.lat,lon:tmp.pick.lon};
+  if(tmp.editId)Object.assign(t.stops.find(x=>x.id===tmp.editId),o);else t.stops.push({id:uid(),...o});
+  save();closeSheet();render();
+}
+function delStop(){const t=trip();t.stops=t.stops.filter(x=>x.id!==tmp.editId);save();closeSheet();render()}
+
+/* ---------- trasporti ---------- */
+function trasportiHTML(t){
+  const L=t.lodging,A=t.airport;
+  let h='<h2>Aeroporto e alloggio</h2>';
+  h+=`<div class="card"><div class="item"><div class="em">🏨</div><div class="grow"><b>${L?esc(L.name):'Alloggio non impostato'}</b></div><button class="btn sm" onclick="placeSheet('lodging')">${L?'Cambia':'Imposta'}</button></div></div>`;
+  h+=`<div class="card"><div class="item"><div class="em">✈️</div><div class="grow"><b>${A?esc(A.name):'Aeroporto non impostato'}</b></div><button class="btn sm" onclick="placeSheet('airport')">${A?'Cambia':'Imposta'}</button></div></div>`;
+  if(L&&A){
+    h+=`<div class="card"><b>Aeroporto → Alloggio</b><div class="btns"><a class="btn sm" href="${dir(L.lat,L.lon,'r',A.lat,A.lon)}">🚇 Mezzi</a><a class="btn sm" href="${dir(L.lat,L.lon,'d',A.lat,A.lon)}">🚕 Auto / taxi</a></div></div>
+    <div class="card"><b>Alloggio → Aeroporto</b><div class="btns"><a class="btn sm" href="${dir(A.lat,A.lon,'r',L.lat,L.lon)}">🚇 Mezzi</a><a class="btn sm" href="${dir(A.lat,A.lon,'d',L.lat,L.lon)}">🚕 Auto / taxi</a></div></div>`;
+  }
+  h+='<h2>I miei mezzi</h2>'+(t.transports.length?t.transports.map(x=>`<div class="card tap" onclick="delTransport('${x.id}')"><div class="item"><div class="em">${MODES[x.mode][0]}</div><div class="grow"><b>${esc(x.from)} → ${esc(x.to)}</b><div class="mut">${MODES[x.mode][1]}${x.cost?' · '+money(x.cost,x.cur):''}</div>${x.note?`<div>${esc(x.note)}</div>`:''}</div></div></div>`).join(''):'<p class="mut">Nessun mezzo aggiunto</p>');
+  return h+'<p class="mut">Tocca un mezzo per eliminarlo.</p><button class="btn pri" onclick="transportSheet()">+ Aggiungi mezzo</button>';
+}
+function placeSheet(kind){
+  const t=trip();
+  tmp={pick:null,bias:t,onPick:r=>{$('#f_name').value=short(r)}};
+  sheet(kind==='lodging'?'Alloggio':'Aeroporto',`${searchBox(kind==='lodging'?'Nome o indirizzo dell\'alloggio':'Es. Aeroporto di Firenze')}
+  <label>Nome</label><input id="f_name">
+  <button class="btn pri" onclick="savePlace('${kind}')">Salva</button>`);
+}
+function savePlace(kind){
+  if(!tmp.pick){toast('Cerca e scegli un luogo');return}
+  trip()[kind]={name:$('#f_name').value.trim()||'Luogo',lat:tmp.pick.lat,lon:tmp.pick.lon};save();closeSheet();render();
+}
+function transportSheet(){
+  const t=trip();
+  sheet('Nuovo mezzo',`<label>Mezzo</label><select id="f_mode">${Object.keys(MODES).map(k=>`<option value="${k}">${MODES[k][0]} ${MODES[k][1]}</option>`).join('')}</select>
+  <label>Da</label><input id="f_from"><label>A</label><input id="f_to">
+  <label>Costo del biglietto (facoltativo)</label><div class="row"><input id="f_cost" type="number" step="0.01" inputmode="decimal"><select id="f_cur" style="width:100px">${curOpts(t.cur)}</select></div>
+  <label>Note</label><textarea id="f_note" rows="2"></textarea>
+  <button class="btn pri" onclick="saveTransport()">Salva</button>`);
+}
+function saveTransport(){
+  const t=trip();
+  t.transports.push({id:uid(),mode:$('#f_mode').value,from:$('#f_from').value.trim()||'?',to:$('#f_to').value.trim()||'?',cost:parseFloat($('#f_cost').value)||0,cur:$('#f_cur').value,note:$('#f_note').value.trim()});
+  save();closeSheet();render();
+}
+function delTransport(id){if(confirm('Eliminare questo mezzo?')){const t=trip();t.transports=t.transports.filter(x=>x.id!==id);save();render()}}
+
+/* ---------- spese ---------- */
+function speseHTML(t){
+  const ex=[...t.expenses].sort((a,b)=>b.date.localeCompare(a.date));
+  return `<div class="card"><div class="mut">Totale in ${t.main}</div><div class="big" id="tot" style="font-size:26px">…</div></div>
+  <div class="row"><div class="grow"><label>Valuta principale</label><select onchange="setMain(this.value)">${curOpts(t.main)}</select></div><div class="grow"><label>Valuta locale</label><select onchange="setLocal(this.value)">${curOpts(t.cur)}</select></div></div>
+  <h2>Spese</h2>${ex.length?ex.map(x=>`<div class="card tap" onclick="delExpense('${x.id}')"><div class="row"><div class="grow"><b>${esc(x.desc)}</b><div class="mut">${esc(x.cat)} · ${new Date(x.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})}</div></div><b>${money(x.amount,x.cur)}</b></div></div>`).join(''):'<p class="mut">Nessuna spesa</p>'}
+  <p class="mut">Tocca una spesa per eliminarla.</p><button class="btn pri" onclick="expenseSheet()">+ Aggiungi spesa</button>`;
+}
+function setMain(v){trip().main=v;save();render()}
+function setLocal(v){trip().cur=v;save();toast('Valuta locale aggiornata')}
+function expenseSheet(){
+  const t=trip();
+  sheet('Nuova spesa',`<label>Descrizione</label><input id="f_desc">
+  <label>Importo</label><div class="row"><input id="f_amt" type="number" step="0.01" inputmode="decimal"><select id="f_cur" style="width:100px">${curOpts(t.cur)}</select></div>
+  <label>Categoria</label><select id="f_cat">${ECATS.map(c=>`<option>${c}</option>`).join('')}</select>
+  <label>Data</label><input id="f_date" type="date" value="${new Date().toISOString().slice(0,10)}">
+  <button class="btn pri" onclick="saveExpense()">Salva</button>`);
+}
+function saveExpense(){
+  const a=parseFloat($('#f_amt').value);if(!a){toast('Inserisci un importo');return}
+  trip().expenses.push({id:uid(),desc:$('#f_desc').value.trim()||'Spesa',amount:a,cur:$('#f_cur').value,cat:$('#f_cat').value,date:$('#f_date').value});
+  save();closeSheet();render();
+}
+function delExpense(id){if(confirm('Eliminare questa spesa?')){const t=trip();t.expenses=t.expenses.filter(x=>x.id!==id);save();render()}}
+async function rate(from,to){
+  if(from===to)return 1;
+  const k=from+'>'+to,c=rc[k];
+  if(c&&Date.now()-c.t<6*3600e3)return c.r;
+  try{
+    const r=await fetch(`https://api.frankfurter.dev/v1/latest?base=${from}&symbols=${to}`);
+    const j=await r.json(),v=j.rates[to];
+    rc[k]={r:v,t:Date.now()};try{localStorage.setItem('rates_v1',JSON.stringify(rc))}catch(e){}
+    return v;
+  }catch(e){return c?c.r:null}
+}
+async function loadTotals(t){
+  let tot=0,miss=false;
+  for(const c of [...new Set(t.expenses.map(x=>x.cur))]){
+    const r=await rate(c,t.main);
+    const sum=t.expenses.filter(x=>x.cur===c).reduce((s,x)=>s+x.amount,0);
+    if(r==null)miss=true;else tot+=sum*r;
+  }
+  const el=$('#tot');if(el)el.innerHTML=money(tot,t.main)+(miss?'<div class="mut" style="font-size:13px;font-weight:400">Alcuni cambi non disponibili (serve connessione)</div>':'');
+}
+
+/* ---------- meteo ---------- */
+function wcode(c){
+  if(c===0)return['☀️','Sereno'];if(c<=2)return['🌤️','Poco nuvoloso'];if(c===3)return['☁️','Coperto'];
+  if(c===45||c===48)return['🌫️','Nebbia'];if(c<=57)return['🌦️','Pioviggine'];if(c<=67)return['🌧️','Pioggia'];
+  if(c<=77)return['🌨️','Neve'];if(c<=82)return['🌦️','Rovesci'];if(c<=86)return['🌨️','Neve'];return['⛈️','Temporale'];
+}
+async function loadWeather(t){
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${t.lat}&longitude=${t.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=10`);
+    const j=await r.json(),d=j.daily;
+    let from=null,to=null;
+    if(t.start){from=t.start;const e=new Date(t.start+'T12:00:00');e.setDate(e.getDate()+t.days-1);to=e.toISOString().slice(0,10)}
+    const el=$('#wx');if(!el)return;
+    el.innerHTML='<p class="mut">Previsioni dei prossimi 10 giorni per la destinazione. I giorni del viaggio sono evidenziati.</p>'+d.time.map((day,i)=>{
+      const w=wcode(d.weathercode[i]),inn=from&&day>=from&&day<=to;
+      return `<div class="wx ${inn?'in':''}"><div class="d">${new Date(day+'T12:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})}</div><div style="font-size:26px">${w[0]}</div><div class="grow">${w[1]}<div class="mut">💧 ${d.precipitation_probability_max[i]==null?'–':d.precipitation_probability_max[i]+'%'}</div></div><b>${Math.round(d.temperature_2m_max[i])}°</b><span class="mut">${Math.round(d.temperature_2m_min[i])}°</span></div>`;
+    }).join('');
+  }catch(e){const el=$('#wx');if(el)el.innerHTML='<p class="mut">Meteo non disponibile: serve la connessione.</p>'}
+}
+
+/* ---------- icona schermata Home ---------- */
+try{
+  const c=document.createElement('canvas');c.width=c.height=180;const x=c.getContext('2d');
+  x.fillStyle='#0a7d6b';x.fillRect(0,0,180,180);x.font='110px serif';x.textAlign='center';x.textBaseline='middle';x.fillText('🧭',90,98);
+  const l=document.createElement('link');l.rel='apple-touch-icon';l.href=c.toDataURL('image/png');document.head.appendChild(l);
+}catch(e){}
+
+render();
+</script>
+</body>
+</html>
