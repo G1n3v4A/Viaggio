@@ -20,6 +20,7 @@ h2{font-size:15px;margin:18px 0 8px;color:var(--mut);text-transform:uppercase;le
 main{flex:1;overflow:auto;padding:14px;position:relative;-webkit-overflow-scrolling:touch}
 main.map{padding:0;overflow:hidden}
 #map{position:absolute;inset:0}
+.leaflet-tile-pane{filter:grayscale(.55) brightness(1.05) contrast(.95)}
 nav{display:flex;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;border:0;background:none;padding:8px 0 6px;font-size:11px;color:var(--mut)}
 nav button b{display:block;font-size:20px;font-weight:400}
@@ -214,7 +215,7 @@ function vicinoHTML(t){
 /* ---------- mappa ---------- */
 function initMap(t){
   map=L.map('map',{zoomControl:false}).setView([t.lat,t.lon],13);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
   const pts=[];
   const add=(p,e)=>{
     const m=L.marker([p.lat,p.lon],{icon:L.divIcon({className:'',html:`<div class="pin">${e}</div>`,iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-14]})}).addTo(map);
